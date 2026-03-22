@@ -1,0 +1,212 @@
+% =========================================================
+% CSC311 Final Project Report Template
+% Single column, 12pt, 8 pages max.
+% =========================================================
+
+\documentclass[12pt]{article}
+
+% ---------- Packages ----------
+\usepackage[margin=1in]{geometry}
+\usepackage{parskip}         % blank line between paragraphs, no indent
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{amsmath, amssymb}
+\usepackage{siunitx}
+\usepackage[hidelinks]{hyperref}
+\usepackage{caption}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage{mathpazo}
+
+%--------- Headers and footers ------
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\setlength{\headheight}{14.49998pt}
+\fancyhf{}
+\fancyhead[L]{CSC311 Project Report}
+\fancyhead[R]{Group Members}
+\fancyfoot[C]{\thepage}
+
+% ---------- Captions & Lists ----------
+\captionsetup{font=small, labelfont=bf}
+\setlist[itemize]{noitemsep, topsep=2pt}
+\setlist[enumerate]{noitemsep, topsep=2pt}
+
+% ---------- Helpful macros ----------
+\newcommand{\bestmodel}{\textit{[Best Model Name]}}
+\newcommand{\projacc}{\textbf{[XX.XX\%]}}
+
+% ---------- Safe figure helper ----------
+\makeatletter
+\newcommand{\maybeincludegraphics}[3]{%
+  \begin{figure}[h]
+    \centering
+    \IfFileExists{#1}{%
+      \includegraphics[width=0.7\linewidth]{#1}%
+    }{%
+      \fbox{%
+        \parbox[c][0.28\textheight][c]{0.7\linewidth}{%
+          \centering
+          \vspace{0.5em}
+          \textit{[Placeholder for \texttt{#1}]}\\
+          Add your figure here.
+          \vspace{0.5em}
+        }%
+      }%
+    }%
+    \caption{#2}
+    \label{#3}
+  \end{figure}%
+}
+\makeatother
+
+% =========================================================
+% Title Page
+% =========================================================
+\begin{document}
+
+\begin{titlepage}
+    \centering
+    \vspace*{3cm}
+
+    {\Large {CSC311: Introduction to Machine Learning} \par}
+    \vspace{1cm}
+    
+    {\Large {Project Report} \par}
+    \vspace{1cm}
+    
+    {\large \textit{Optional Creative Project Title} \par}
+    \vspace{3cm}
+    
+    {\large Submitted by \par}
+    
+%    \vspace{0.5cm}
+%    {\large Group Number}
+    
+    \vspace{0.5cm}
+    {\large Student 1, Student 2, Student 3, Student 4 \par}
+    
+    \vfill
+    {\large University of Toronto \\ Winter 2026 \par}
+\end{titlepage}
+\clearpage
+\setcounter{page}{1}
+
+\section{Instructions}
+
+\textbf{Remove this section from your final submission.}
+
+Submit a pdf file called `csc311challenge.pdf' that describes your final model,
+as well as the steps that you took to develop this model.
+
+Along with the PDF file,
+please also submit any other `.py' or `.ipynb' files that you used while developing
+your model. This latter files will not be graded, but are used as evidence that you
+completed your own work.
+The `.py' or `.ipynb' files do not need to be runnable by the TA, and can rely on
+external imports (e.g. sklearn) and data sets that you don't submit.
+Only your final `pred.py' file needs to be runnable.
+
+To make use of this template, you should remove the instructions from each of the sections below
+and replace them with a written description that addresses the required points.
+
+As a reminder, you may not use genAI to generate any of the written (English) components of this project, including this final report.
+Any genAI usage for other parts of your project must be cited and submitted with your final report in a separate file called `cs311genAI.pdf'.
+
+\textbf{This report is due at 10:00 pm on March 30.}
+
+
+\section{Data Exploration}
+
+\textbf{Worth 2 points. No more than 2 pages.} Describe how you explored your data, and the process through
+which you determined your input features. How did you end up representing your data?
+What else did you try?  We are looking for:
+\begin{itemize}
+	\item A thorough exploration of the data, similar to what is presented in labs.
+	What are the distributions of the features? How do these features correlate with the target?
+	\item If you use figures to answer those questions, an explanation of how you are
+	interpreting those figures. Take care that your figures can be interpreted
+	meaningfully.
+	\item A clear and logical description of how you determined your input features,
+	with convincing logical or empirical evidence justifying your choice. 
+	Important features are not overlooked (e.g., not removed for ``ease'').
+	\item A clear description of the way(s) that you are representing the data in
+	your models.
+	\item The descriptions should be consistent with the `.py' and/or `.ipynb' files that you
+	used while developing your model.
+	\item A clear description of how you are splitting your data into various sets.
+	You may use k-fold cross validation if you'd like, but if you do, describe how
+	you are applying that idea.
+\end{itemize}
+
+
+\section{Model Exploration}
+
+\textbf{Worth 1 point. No more than 1 page.} Describe the model(s) that you evaluated/explored.
+We are expecting a thorough exploration of at least 3+ family of models\footnote{A "family" of models are
+	a group of similar models. For example, linear models of various types are considered to be a part of
+	the same family.}, even if you did't ultimately use those models.
+We are looking for:
+\begin{itemize}
+	\item How you are applied these models. You don't need to reiterate how they work.
+	Instead, we're looking for a description of the choices
+	you made to apply each model to this task: e.g., what features from the ``Data" section
+	did you use for each model? What adjustments (if any) did you need to make?
+\end{itemize}
+
+
+\section{Model Choice and Hyperparameters}
+
+\textbf{Worth 3 points. No more than 3 pages.} How did you determine which model(s)
+to use in your final `pred.py', as well as an exploration of hyperparameters.
+We are looking for:
+\begin{itemize}
+	\item A convincing explanation of how you ensured that the evaluation metrics for various
+	models are comparable (i.e., are you using a consistent test set?)
+	\item A clear description of the evaluation metric(s) used to evaluate your model, 
+	as well as justification for its use.
+	\item A description of the hyperparameters that you are tuning, hyperparameter value
+	combinations that you have tried, and the value of the evaluation metric(s)
+	for those hyperparameters.
+	We are not looking for an exhaustive search of all possible hyperparameter 
+	combinations, but there should be enough evidence to demonstrate that your
+	hyperparameter choices are reasonable.
+	(Note that just saying "X was the best hyperparameter value based on metric Y out of
+	the hyperparameter values we tried" is not enough. Please present the values of the
+	evaluation metrics for each hyperparameter value to \textbf{show} that your choice was the best one.)
+	\item A clear description of what your final model choice looks like in the
+	submitted `pred.py' file.
+	\item The descriptions should be consistent with the `.py' and/or `.ipynb' files that you
+	used while developing your model.
+\end{itemize}
+
+
+\section{Prediction}
+
+\textbf{Worth 1 points. No more than 1 page.} How well would you expect your model to perform on the
+test set? We are looking for:
+\begin{itemize}
+	\item A point estimate for your performance, \textbf{not a range}.
+	\item A reasoned explanation of your expected model performance, with empirical
+	evidence supporting your explanation. 
+	You are not graded on the closeness of your estimate to the final test accuracy,
+	but you are graded on your reasoning.
+\end{itemize}
+
+
+\section{Workload Distribution}
+
+Describe what each person in the group contributed
+to the project. A 1-2 sentence description of each person's role is sufficient.
+Each student's description must be written by that student in order for them
+to receive credit for the project.
+
+
+\section{References}
+
+Use references whenever appropriate (e.g., when you consult textbooks, research papers, online tutorials, or external code). Cite in the text using \verb|\cite{}|. For example, let's cite the two references provided in the \texttt{.bib} file \cite{bishop2006prml,hastie2009esl}. (Replace these with your own references.)
+
+\bibliographystyle{plain}
+\bibliography{references}
+
+\end{document}
