@@ -399,83 +399,112 @@ for combo_name, model_names in combos:
 print("\n" + "=" * 70)
 print("EXPERIMENT 4: 5-FOLD CV ON BEST INDIVIDUAL + ENSEMBLE")
 print("=" * 70)
-
-# For CV we need to rebuild features on each fold properly
-# Simpler approach: fit vectorizers on full data (slight optimism, but
-# consistent with how we'll deploy — train on ALL data for final model)
-X_full, _, vecs_full = build_features(
-    bow_type="count", max_features=100, ngram_range=(1,2), min_df=5, binary=True
-)
-# Combine train+val since build_features split them
-X_all = pd.concat([X_full, _], axis=0).sort_index()
-X_all = X_all.fillna(0)
-
-# Scale all
-X_all_s = X_all.copy()
-scaler_all = StandardScaler()
-X_all_s[cols_to_scale] = scaler_all.fit_transform(X_all[cols_to_scale])
-X_all_nn = X_all.clip(lower=0)
-
+ 
 cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
-
-cv_configs = [
-    ("LogReg C=0.1", LogisticRegression(C=0.1, max_iter=1000), X_all_s),
-    ("LogReg C=0.05", LogisticRegression(C=0.05, max_iter=1000), X_all_s),
-    ("RF n=200 d=10", RandomForestClassifier(n_estimators=200, max_depth=10, random_state=42), X_all),
-    ("RF n=200 d=15", RandomForestClassifier(n_estimators=200, max_depth=15, random_state=42), X_all),
-    ("MLP (128,64)", MLPClassifier(hidden_layer_sizes=(128,64), alpha=0.01, max_iter=500, random_state=42, early_stopping=True), X_all_s),
-    ("CompNB a=0.1", ComplementNB(alpha=0.1), X_all_nn),
-]
-
+ 
+# Build features INSIDE each fold to avoid data leakage
+def build_fold_features(train_i, val_i):
+    """Build feature matrices with BoW fit on train fold only."""
+    struct = pd.concat([df[numeric_cols + likert_cols], room_df, who_df, season_df], axis=1)
+ 
+    # Fill NaN with train-fold medians
+    for col in numeric_cols + likert_cols:
+        med = struct.iloc[train_i][col].median()
+        struct[col] = struct[col].fillna(med)
+ 
+    # BoW — fit on train fold, transform both
+    bow_tr_parts, bow_v_parts = [], []
+    for tcol in ["text_feelings", "text_food", "text_soundtrack"]:
+        vec = CountVectorizer(max_features=100, stop_words="english",
+                              min_df=5, binary=True, ngram_range=(1,2))
+        bow_tr = vec.fit_transform(df[tcol].iloc[train_i])
+        bow_v = vec.transform(df[tcol].iloc[val_i])
+        cols = [f"{tcol}_{w}" for w in vec.get_feature_names_out()]
+        bow_tr_parts.append(pd.DataFrame(bow_tr.toarray(), columns=cols))
+        bow_v_parts.append(pd.DataFrame(bow_v.toarray(), columns=cols))
+ 
+    X_tr = pd.concat([struct.iloc[train_i].reset_index(drop=True)] + bow_tr_parts, axis=1).fillna(0)
+    X_v = pd.concat([struct.iloc[val_i].reset_index(drop=True)] + bow_v_parts, axis=1).fillna(0)
+ 
+    # Scale numeric/likert
+    scaler_cv = StandardScaler()
+    cols_to_scale = numeric_cols + likert_cols
+    X_tr_s, X_v_s = X_tr.copy(), X_v.copy()
+    X_tr_s[cols_to_scale] = scaler_cv.fit_transform(X_tr[cols_to_scale])
+    X_v_s[cols_to_scale] = scaler_cv.transform(X_v[cols_to_scale])
+ 
+    return X_tr, X_v, X_tr_s, X_v_s
+ 
+# --- Individual 5-fold CV ---
 print("\n--- Individual 5-fold CV ---")
-for name, model, X_cv in cv_configs:
-    scores = cross_val_score(model, X_cv, y, cv=cv, scoring="accuracy")
-    print(f"  {name:25s} | Mean: {scores.mean():.4f} ± {scores.std():.4f} | {scores.round(4)}")
-
-# Manual CV for ensemble
-print("\n--- Ensemble 5-fold CV ---")
-best_ensemble_combos = sorted(ensemble_results, key=lambda x: -x[1])[:3]
-
-for combo_name, _, model_names in best_ensemble_combos:
+individual_cv = [
+    ("LogReg C=0.1",  "s", lambda: LogisticRegression(C=0.1, max_iter=1000)),
+    ("LogReg C=0.05", "s", lambda: LogisticRegression(C=0.05, max_iter=1000)),
+    ("RF n=200 d=10", "r", lambda: RandomForestClassifier(n_estimators=200, max_depth=10, random_state=42)),
+    ("RF n=200 d=15", "r", lambda: RandomForestClassifier(n_estimators=200, max_depth=15, random_state=42)),
+    ("MLP (128,64)",  "s", lambda: MLPClassifier(hidden_layer_sizes=(128,64), alpha=0.01, max_iter=500, random_state=42, early_stopping=True)),
+    ("CompNB a=0.1",  "n", lambda: ComplementNB(alpha=0.1)),
+]
+ 
+for name, typ, model_fn in individual_cv:
     fold_accs = []
-    for train_i, val_i in cv.split(X_all, y):
-        y_tr_f, y_v_f = y[train_i], y[val_i]
-        probs = np.zeros((len(val_i), 3))
-
-        for mname in model_names:
-            if "LogReg" in mname:
-                C_val = float(mname.split("C=")[1])
-                m = LogisticRegression(C=C_val, max_iter=1000)
-                X_use = X_all_s
-            elif "RF" in mname:
-                parts = mname.split()
-                n_est = int(parts[1].split("=")[1])
-                depth_str = parts[2].split("=")[1]
-                depth = None if depth_str == "None" else int(depth_str)
-                m = RandomForestClassifier(n_estimators=n_est, max_depth=depth, random_state=42)
-                X_use = X_all
-            elif "CompNB" in mname:
-                alpha_val = float(mname.split("a=")[1])
-                m = ComplementNB(alpha=alpha_val)
-                X_use = X_all_nn
-            elif "MLP" in mname:
-                # Parse hidden layers
-                hidden_str = mname.split("(")[1].split(")")[0]
-                hidden = tuple(int(x) for x in hidden_str.split(","))
-                alpha_val = float(mname.split("a=")[1])
-                m = MLPClassifier(hidden_layer_sizes=hidden, alpha=alpha_val,
-                                  max_iter=500, random_state=42, early_stopping=True)
-                X_use = X_all_s
-
-            m.fit(X_use.iloc[train_i], y_tr_f)
-            probs += m.predict_proba(X_use.iloc[val_i])
-
-        probs /= len(model_names)
-        preds = np.argmax(probs, axis=1)
-        fold_accs.append(accuracy_score(y_v_f, preds))
-
+    for train_i, val_i in cv.split(np.zeros(len(y)), y):
+        X_tr, X_v, X_tr_s, X_v_s = build_fold_features(train_i, val_i)
+        m = model_fn()
+        if typ == "s":
+            m.fit(X_tr_s, y[train_i]); pred = m.predict(X_v_s)
+        elif typ == "n":
+            m.fit(X_tr.clip(lower=0), y[train_i]); pred = m.predict(X_v.clip(lower=0))
+        else:
+            m.fit(X_tr, y[train_i]); pred = m.predict(X_v)
+        fold_accs.append(accuracy_score(y[val_i], pred))
     fold_accs = np.array(fold_accs)
-    print(f"  {combo_name:40s} | Mean: {fold_accs.mean():.4f} ± {fold_accs.std():.4f} | {fold_accs.round(4)}")
+    print(f"  {name:25s} | Mean: {fold_accs.mean():.4f} ± {fold_accs.std():.4f} | {fold_accs.round(4)}")
+ 
+# --- Ensemble 5-fold CV ---
+print("\n--- Ensemble 5-fold CV ---")
+ensemble_cv_configs = {
+    "LogReg + RF": [
+        ("s", lambda: LogisticRegression(C=0.1, max_iter=1000)),
+        ("r", lambda: RandomForestClassifier(n_estimators=200, max_depth=10, random_state=42)),
+    ],
+    "LogReg + RF + MLP": [
+        ("s", lambda: LogisticRegression(C=0.1, max_iter=1000)),
+        ("r", lambda: RandomForestClassifier(n_estimators=200, max_depth=10, random_state=42)),
+        ("s", lambda: MLPClassifier(hidden_layer_sizes=(128,64), alpha=0.01, max_iter=500, random_state=42, early_stopping=True)),
+    ],
+    "LogReg + RF + NB": [
+        ("s", lambda: LogisticRegression(C=0.1, max_iter=1000)),
+        ("r", lambda: RandomForestClassifier(n_estimators=200, max_depth=10, random_state=42)),
+        ("n", lambda: ComplementNB(alpha=0.1)),
+    ],
+    "LogReg + 2xRF": [
+        ("s", lambda: LogisticRegression(C=0.1, max_iter=1000)),
+        ("r", lambda: RandomForestClassifier(n_estimators=200, max_depth=10, random_state=42)),
+        ("r", lambda: RandomForestClassifier(n_estimators=300, max_depth=10, random_state=42)),
+    ],
+}
+ 
+for ens_name, model_list in ensemble_cv_configs.items():
+    fold_accs = []
+    for train_i, val_i in cv.split(np.zeros(len(y)), y):
+        X_tr, X_v, X_tr_s, X_v_s = build_fold_features(train_i, val_i)
+        probs = np.zeros((len(val_i), 3))
+ 
+        for typ, model_fn in model_list:
+            m = model_fn()
+            if typ == "s":
+                m.fit(X_tr_s, y[train_i]); probs += m.predict_proba(X_v_s)
+            elif typ == "n":
+                m.fit(X_tr.clip(lower=0), y[train_i]); probs += m.predict_proba(X_v.clip(lower=0))
+            else:
+                m.fit(X_tr, y[train_i]); probs += m.predict_proba(X_v)
+ 
+        preds = np.argmax(probs / len(model_list), axis=1)
+        fold_accs.append(accuracy_score(y[val_i], preds))
+ 
+    fold_accs = np.array(fold_accs)
+    print(f"  {ens_name:30s} | Mean: {fold_accs.mean():.4f} ± {fold_accs.std():.4f} | {fold_accs.round(4)}")
 
 
 # ═════════════════════════════════════════════
